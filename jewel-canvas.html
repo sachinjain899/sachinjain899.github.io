@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Realistic Ring Customizer</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            display: flex;
+            background-color: #f7f7f7;
+        }
+
+        .controls {
+            position: relative;
+            width: 300px;
+            padding: 15px;
+            background: rgba(255, 255, 255, 0.95);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+            z-index: 10;
+        }
+
+        select, label, input, button {
+            margin: 5px 0;
+            width: 100%;
+        }
+
+        canvas {
+            flex: 1;
+        }
+    </style>
+</head>
+<body>
+    <canvas></canvas>
+    <div class="controls">
+        <label for="metalColor">Metal Color:</label>
+        <select id="metalColor">
+            <option value="white">White Gold/Platinum</option>
+            <option value="rose">Rose Gold</option>
+            <option value="gold">Yellow Gold</option>
+        </select>
+
+        <label for="ringType">Ring Type:</label>
+        <select id="ringType">
+            <option value="plain">Plain</option>
+            <option value="flat">Flat</option>
+        </select>
+
+        <label for="diamondShape">Diamond Shape:</label>
+        <select id="diamondShape">
+            <option value="round">Round</option>
+            <option value="princess">Princess</option>
+            <option value="oval">Oval</option>
+            <option value="emerald">Emerald</option>
+            <option value="heart">Heart</option>
+        </select>
+
+        <label for="carat">Diamond Carat:</label>
+        <input type="range" id="carat" min="0.5" max="3" step="0.1" value="1.5">
+
+        <label for="engraving">Engraving Text:</label>
+        <input type="text" id="engraving" placeholder="Enter engraving text">
+        <button id="applyEngraving">Apply Engraving</button>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three/examples/js/loaders/RGBELoader.js"></script>
+    <script>
+        let scene, camera, renderer, ring, gemstone, controls, envMap, textMesh;
+
+        // Initialize the scene
+        function init() {
+            // Scene setup
+            scene = new THREE.Scene();
+
+            // HDR environment map for realistic reflections
+            const rgbeLoader = new THREE.RGBELoader();
+            rgbeLoader.load(
+                'https://cdn.jsdelivr.net/gh/mrdoob/three.js/examples/textures/equirectangular/royal_esplanade_1k.hdr',
+                function (texture) {
+                    texture.mapping = THREE.EquirectangularReflectionMapping;
+                    envMap = texture;
+                    scene.environment = envMap;
+
+                    // Initialize ring after environment is loaded
+                    createRing('white', 'round', 1.5);
+                }
+            );
+
+            // Camera setup
+            camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 2, 5);
+
+            // Renderer setup
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.toneMapping = THREE.ACESFilmicToneMapping;
+            renderer.outputEncoding = THREE.sRGBEncoding;
+            document.body.appendChild(renderer.domElement);
+
+            // Lighting
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+            directionalLight.position.set(5, 10, 5);
+            scene.add(directionalLight);
+
+            const ambientLight = new THREE.AmbientLight(0x404040);
+            scene.add(ambientLight);
+
+            const pointLight = new THREE.PointLight(0xffffff, 1, 100);
+            pointLight.position.set(10, 10, 10);
+            scene.add(pointLight);
+
+            // Orbit controls
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+
+            // Event listeners
+            window.addEventListener('resize', onWindowResize);
+            document.getElementById('metalColor').addEventListener('change', updateMetalColor);
+            document.getElementById('ringType').addEventListener('change', updateRingType);
+            document.getElementById('diamondShape').addEventListener('change', updateDiamond);
+            document.getElementById('carat').addEventListener('input', updateCarat);
+            document.getElementById('applyEngraving').addEventListener('click', applyEngraving);
+        }
+
+        // Create the ring
+        function createRing(metalType, diamondShape, carat) {
+            if (ring) scene.remove(ring);
+
+            // Ring geometry
+            const ringGeometry = new THREE.TorusGeometry(1, 0.15, 30, 200);
+            const ringMaterial = new THREE.MeshPhysicalMaterial({
+                color: getMetalColor(metalType),
+                metalness: 1,
+                roughness: 0.2,
+                envMap: envMap,
+                clearcoat: 1,
+                clearcoatRoughness: 0.1
+            });
+
+            ring = new THREE.Mesh(ringGeometry, ringMaterial);
+            scene.add(ring);
+
+            // Add diamond and crown setting
+            updateDiamond();
+            addCrownSetting();
+        }
+
+        // Add crown setting with prongs
+        function addCrownSetting() {
+            const crownMaterial = new THREE.MeshPhysicalMaterial({
+                color: getMetalColor(document.getElementById('metalColor').value),
+                metalness: 1,
+                roughness: 0.2,
+                envMap: envMap,
+                clearcoat: 1,
+                clearcoatRoughness: 0.1
+            });
+
+            // Create prongs (4 prongs for a classic crown setting)
+            const prongGeometry = new THREE.CylinderGeometry(0.05, 0.05, 0.3, 12);
+            const prongPositions = [
+                { x: 0.3, y: 1.35, z: 0.3 },
+                { x: -0.3, y: 1.35, z: 0.3 },
+                { x: 0.3, y: 1.35, z: -0.3 },
+                { x: -0.3, y: 1.35, z: -0.3 }
+            ];
+
+            prongPositions.forEach(pos => {
+                const prong = new THREE.Mesh(prongGeometry, crownMaterial);
+                prong.position.set(pos.x, pos.y, pos.z);
+                ring.add(prong);
+            });
+
+            // Add a base for the crown setting
+            const baseGeometry = new THREE.CylinderGeometry(0.2, 0.2, 0.1, 6);
+            const base = new THREE.Mesh(baseGeometry, crownMaterial);
+            base.position.set(0, 1.2, 0);
+            ring.add(base);
+        }
+
+        // Update diamond
+        function updateDiamond() {
+            const shape = document.getElementById('diamondShape').value;
+            const carat = document.getElementById('carat').value;
+
+            if (gemstone) ring.remove(gemstone);
+
+            let gemGeometry;
+            switch (shape) {
+                case 'round':
+                    gemGeometry = new THREE.OctahedronGeometry(carat / 2);
+                    break;
+                case 'princess':
+                    gemGeometry = new THREE.BoxGeometry(carat / 1.5, carat / 1.5, carat / 1.5);
+                    break;
+                case 'oval':
+                    gemGeometry = new THREE.SphereGeometry(carat / 2, 32, 32);
+                    gemGeometry.scale(1.5, 1, 1);
+                    break;
+                case 'emerald':
+                    gemGeometry = new THREE.CylinderGeometry(carat / 2, carat / 2, carat / 1.5, 8);
+                    break;
+                case 'heart':
+                    gemGeometry = new THREE.SphereGeometry(carat / 2, 32, 32);
+                    gemGeometry.scale(1.2, 1, 1.2);
+                    break;
+            }
+
+            const gemMaterial = new THREE.MeshPhysicalMaterial({
+                color: 0xffffff, // Diamond color should not change
+                metalness: 0,
+                roughness: 0,
+                envMap: envMap,
+                transmission: 1,
+                thickness: 0.5,
+                ior: 2.42
+            });
+
+            gemstone = new THREE.Mesh(gemGeometry, gemMaterial);
+            gemstone.position.set(0, 1.5, 0);
+            ring.add(gemstone);
+        }
+
+        // Update metal color
+		function updateMetalColor() {
+			const metalType = document.getElementById('metalColor').value;
+			ring.material.color.set(getMetalColor(metalType));
+
+			// Update the metal color of the ring and crown, but NOT the gemstone (diamond)
+			ring.children.forEach(child => {
+				if (child.material && child !== gemstone) {
+					child.material.color.set(getMetalColor(metalType));
+				}
+			});
+		}
+
+        // Update carat size
+        function updateCarat() {
+            updateDiamond();
+        }
+
+        // Update ring type (plain or flat)
+        function updateRingType() {
+            const ringType = document.getElementById('ringType').value;
+            // Apply flat design changes (you can add different geometry logic for flat ring here)
+            if (ringType === 'flat') {
+                const flatGeometry = new THREE.TorusGeometry(1, 0.2, 30, 200); // A slightly thicker flat band
+                ring.geometry.dispose(); // Dispose of previous geometry
+                ring.geometry = flatGeometry;
+            } else {
+                const plainGeometry = new THREE.TorusGeometry(1, 0.15, 30, 200); // Revert to plain ring
+                ring.geometry.dispose();
+                ring.geometry = plainGeometry;
+            }
+        }
+
+        // Apply engraving
+        function applyEngraving() {
+            const engravingText = document.getElementById('engraving').value;
+            if (textMesh) ring.remove(textMesh);
+
+            const textGeometry = new THREE.TextGeometry(engravingText, {
+                font: new THREE.FontLoader().parse(/* Load your font JSON */),
+                size: 0.1,
+                height: 0.02
+            });
+
+            const textMaterial = new THREE.MeshStandardMaterial({ color: 0x000000 });
+            textMesh = new THREE.Mesh(textGeometry, textMaterial);
+            textMesh.position.set(-0.5, -0.5, 0.2);
+            ring.add(textMesh);
+        }
+
+        // Helper: Metal colors
+        function getMetalColor(type) {
+            return {
+                'white': 0xf4f4f4,
+                'rose': 0xffc0cb,
+                'gold': 0xffd700
+            }[type];
+        }
+
+        // Handle window resize
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // Animation loop
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        // Initialize and start
+        init();
+        animate();
+    </script>
+</body>
+</html>
